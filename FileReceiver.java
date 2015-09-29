@@ -16,8 +16,8 @@ public class FileReceiver  {
 		DatagramSocket sk = new DatagramSocket(port);
 		
 		// Receive destination filename from FileSender
-    String destFileName = rcvDestFileName(sk);
-    System.out.println("Dest filename: " + destFileName);
+    		String destFileName = rcvDestFileName(sk);
+    		System.out.println("Dest filename: " + destFileName);
 	}
 	
 	public static String rcvDestFileName(DatagramSocket sk) throws Exception {
@@ -40,6 +40,7 @@ public class FileReceiver  {
 		else {
 		  DatagramPacket ack = new DatagramPacket(new byte[0], 0, 0, packet.getSocketAddress());
 		  sk.send(ack);
-  }
+  		}
 		return dest;
 	}
+}
