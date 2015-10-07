@@ -1,0 +1,125 @@
+import java.io.*;
+import java.net.*;
+import java.util.zip.CRC32;
+import java.nio.*;
+
+public class FileSender {
+	public static void main (String[] args) throws Exception {
+		
+		// Input validation
+		if (args.length != 4) {
+			System.err.println("Usage: FileSender <host> <port> <src> <dest>");
+			System.exit(-1);
+		}
+		
+		// Create a socket address from a hostname and a port number
+		InetSocketAddress addr = new InetSocketAddress(args[0], Integer.parseInt(args[1]));
+		
+		String SRC_FILE = args[2];
+		
+		// A datagram socket is the sending or receiving point for a packet delivery service
+		DatagramSocket sk = new DatagramSocket(); // Constructs a datagram socket and bind it to any available port on the local host machine
+		
+		// Call function to send filename over to FileReceiver for storing
+		String DEST_FILE = args[3];
+		sendDestFileName(DEST_FILE, addr, sk);
+		System.out.println("Exited the sendDestFileName method");
+		
+		reliableSend(SRC_FILE, addr, sk);
+		System.out.println("Exited the reliableSend method");
+	}
+		
+	// Sends filename over to FileReceiver for storing
+	public static void sendDestFileName(String dest, InetSocketAddress addr, DatagramSocket sk) throws Exception {
+		
+		DatagramPacket pkt;
+		byte[] data = new byte[1500];
+		ByteBuffer b = ByteBuffer.wrap(data);
+
+		CRC32 crc = new CRC32();
+		
+		// To receive ack from FileReceiver
+		byte[] response = new byte[8];
+		DatagramPacket ack = new DatagramPacket(response, response.length);
+		ByteBuffer b_ack = ByteBuffer.wrap(response);
+		int ackLen = 0; // initialize to 0 when ACK has yet to be received
+		
+		while(ackLen != 1) {
+			b.clear();
+			// reserve space for checksum
+			b.putLong(0);
+			b.putInt(0);
+			b.put(dest.getBytes());
+			crc.reset();
+			crc.update(data, 12, data.length-12);
+
+			long chksum = crc.getValue();
+			b.rewind();
+			b.putLong(chksum);
+			System.out.println("Checksum value: " + chksum);
+
+			pkt = new DatagramPacket(data, data.length, addr);
+
+			sk.send(pkt);
+			
+			sk.receive(ack);
+			ackLen = ack.getLength(); // when ACK is received, ack.getLength() == 1
+		} 
+		System.out.println("ACK received!");
+	}
+	
+	public static void reliableSend(String source, InetSocketAddress addr, DatagramSocket sk) throws IOException {
+		System.out.println("Start of reliableSend");
+		File src = new File(source);
+		byte[] buf = new byte[(int) src.length()];
+		System.out.println(src.length());
+		//ByteBuffer b = ByteBuffer.wrap(buf);
+		
+		FileInputStream fis = null;
+		BufferedInputStream bis = null;
+		
+		try {
+			fis = new FileInputStream(src);
+			bis = new BufferedInputStream(fis);
+			bis.read(buf, 0, buf.length); // reads bytes from bis into byte[] data
+		}
+		catch (FileNotFoundException e) {
+			System.out.println("File not found");
+		}
+		int seq_num;
+		CRC32 crc = new CRC32();
+		byte[] data = new byte[20];
+		ByteBuffer b = ByteBuffer.wrap(data);
+		DatagramPacket pkt;
+		
+		for (int i = 0; i < (int)src.length(); i++) {
+			b.clear();
+			b.putLong(0); // reserve space for checksum
+			b.putInt(i); // put sequence number in the header
+			b.put(buf[i]);
+			crc.reset();
+			crc.update(data, 12, data.length-12);
+			long chksum = crc.getValue();
+			b.rewind();
+			b.putLong(chksum);
+			System.out.println("Checksum value: " + chksum);
+			
+			pkt = new DatagramPacket(data, data.length, addr);
+			// Debug output
+			System.out.println("Sent CRC:" + chksum + " Contents:" + bytesToHex(data));
+			sk.send(pkt);
+		}
+		bis.close();
+	}
+	
+	final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
+	public static String bytesToHex(byte[] bytes) {
+	    char[] hexChars = new char[bytes.length * 2];
+	    for ( int j = 0; j < bytes.length; j++ ) {
+	        int v = bytes[j] & 0xFF;
+	        hexChars[j * 2] = hexArray[v >>> 4];
+	        hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+	    }
+	    return new String(hexChars);
+	}
+}
